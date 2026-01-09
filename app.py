@@ -2,135 +2,101 @@ import streamlit as st
 import pandas as pd
 import sqlite3
 from datetime import datetime
-import hashlib
+import io
 
-# إعدادات الصفحة (متوافقة مع الهاتف)
+# إعدادات الصفحة
 st.set_page_config(page_title="مخيم رفح السلام", layout="wide")
 
-# حقوق الملكية
-ST_FOOTER = "جميع الحقوق محفوظة باسم ابوسفيان © 2026"
+# دالة للاتصال بقاعدة البيانات
+def get_connection():
+    conn = sqlite3.connect('camp_system.db', check_same_thread=False)
+    return conn
 
-# الاتصال بقاعدة البيانات
-conn = sqlite3.connect('camp_data.db', check_same_thread=False)
+conn = get_connection()
 c = conn.cursor()
 
-# إنشاء الجداول إذا لم تكن موجودة
-c.execute('''CREATE TABLE IF NOT EXISTS users 
-             (id_num TEXT PRIMARY KEY, name TEXT, phone TEXT, health TEXT, disability_type TEXT, 
-              social_status TEXT, secret_ans1 TEXT, secret_ans2 TEXT, role TEXT, password TEXT)''')
+# إنشاء الجداول (المستخدمين، الأبناء، الزوجات)
+c.execute('''CREATE TABLE IF NOT EXISTS residents (
+    id_num TEXT PRIMARY KEY, fname TEXT, sname TEXT, tname TEXT, lname TEXT,
+    phone TEXT, health TEXT, dis_type TEXT, social TEXT, status TEXT DEFAULT 'قيد الانتظار')''')
 
-c.execute('''CREATE TABLE IF NOT EXISTS family_members 
-             (parent_id TEXT, member_name TEXT, member_id TEXT, birth_date TEXT, 
-              age INTEGER, is_orphan TEXT, health_status TEXT, relation TEXT)''')
-
-c.execute('''CREATE TABLE IF NOT EXISTS news (content TEXT, date TEXT)''')
+c.execute('''CREATE TABLE IF NOT EXISTS family (
+    parent_id TEXT, member_type TEXT, name TEXT, id_num TEXT, birth_date TEXT, age TEXT, health TEXT, orphan TEXT)''')
 conn.commit()
 
-# دالة تشفير كلمة المرور
-def make_hashes(password):
-    return hashlib.sha256(str.encode(password)).hexdigest()
+# --- واجهة التطبيق ---
+st.markdown("""<style> div.stButton > button { width: 100%; border-radius: 10px; } .stTextInput>div>div>input { text-align: right; } </style>""", unsafe_allow_html=True)
 
-# إضافة الإدمن الافتراضي (د. أكرم السدودي)
-admin_id = "803256551"
-admin_pw = make_hashes("12345")
-c.execute("INSERT OR IGNORE INTO users (id_num, role, password) VALUES (?, ?, ?)", (admin_id, 'admin', admin_pw))
-conn.commit()
+st.title("🏥 منظومة مخيم رفح السلام")
+st.write(f"إدارة الدكتور أكرم السدودي | {datetime.now().strftime('%Y-%m-%d %H:%M')}")
 
-# --- واجهة المستخدم ---
-st.title("🏥 مخيم رفح السلام")
-st.subheader("إدارة الدكتور أكرم السدودي")
-st.write(f"📅 {datetime.now().strftime('%Y-%m-%d')} | 🕒 {datetime.now().strftime('%H:%M:%S')}")
+menu = ["🏠 الرئيسية", "📝 تسجيل جديد", "🔐 لوحة تحكم الإدارة"]
+choice = st.sidebar.selectbox("القائمة", menu)
 
-menu = ["تسجيل الدخول", "تسجيل جديد (للنازحين)"]
-choice = st.sidebar.selectbox("القائمة الرئيسية", menu)
-
-if choice == "تسجيل جديد (للنازحين)":
-    st.header("📝 استمارة تسجيل البيانات")
-    
-    with st.form("reg_form"):
+if choice == "📝 تسجيل جديد":
+    st.header("إدخال بيانات النازح")
+    with st.form("main_form"):
         col1, col2, col3, col4 = st.columns(4)
-        fname = col1.text_input("الاسم الأول")
-        sname = col2.text_input("الاسم الثاني")
-        tname = col3.text_input("الاسم الثالث")
-        lname = col4.text_input("الاسم الرابع")
+        fn = col1.text_input("الاسم الأول")
+        sn = col2.text_input("الثاني")
+        tn = col3.text_input("الثالث")
+        ln = col4.text_input("الرابع")
         
         id_num = st.text_input("رقم الهوية")
         phone = st.text_input("رقم الجوال")
         
         health = st.selectbox("الحالة الصحية", ["سليم", "مزمن", "اعاقة"])
-        dis_type = ""
-        if health == "اعاقة":
-            dis_type = st.text_input("نوع الاعاقة")
-            
+        dis_info = st.text_input("نوع الإعاقة (إن وجد)") if health == "اعاقة" else ""
+        
         social = st.selectbox("الحالة الاجتماعية", ["اعزب", "متزوج", "متعدد الزوجات", "مطلق/ه", "ارمل/ه"])
         
-        st.info("أسئلة الأمان (للدخول لاحقاً)")
-        q1 = st.text_input("تاريخ ميلادك (مثلاً 1990)")
-        q2 = st.text_input("اسم طفلك الأول (أو أي كلمة سر خاصة)")
+        # إضافة الزوجات والأبناء (محاكاة الحقول الديناميكية)
+        st.subheader("👨‍👩‍👧‍👦 بيانات العائلة")
+        family_data = st.text_area("أدخل أسماء الأبناء وهوياتهم (اسم - هوية - تاريخ ميلاد)")
         
-        submit = st.form_submit_button("حفظ البيانات")
+        submit = st.form_submit_button("إرسال للتدقيق")
         
         if submit:
-            full_name = f"{fname} {sname} {tname} {lname}"
-            try:
-                c.execute("INSERT INTO users (id_num, name, phone, health, disability_type, social_status, secret_ans1, secret_ans2, role) VALUES (?,?,?,?,?,?,?,?,?)",
-                          (id_num, full_name, phone, health, dis_type, social, q1, q2, 'user'))
-                conn.commit()
-                st.success("تم تسجيل بياناتك بنجاح!")
-            except:
-                st.error("رقم الهوية مسجل مسبقاً")
-
-elif choice == "تسجيل الدخول":
-    st.sidebar.header("لوحة الدخول")
-    login_id = st.sidebar.text_input("رقم الهوية")
-    login_pw = st.sidebar.text_input("كلمة المرور (للإدارة فقط)", type='password')
-    
-    # أسئلة الأمان للمستخدمين العاديين
-    s_ans1 = st.sidebar.text_input("سؤال الأمان 1 (تاريخ الميلاد)")
-    s_ans2 = st.sidebar.text_input("سؤال الأمان 2 (الاسم الخاص)")
-
-    if st.sidebar.button("دخول"):
-        # فحص إذا كان أدمن
-        if login_id == admin_id and make_hashes(login_pw) == admin_pw:
-            st.session_state['role'] = 'admin'
-            st.success("مرحباً د. أكرم السدودي")
-        else:
-            # فحص مستخدم عادي
-            c.execute("SELECT * FROM users WHERE id_num=? AND secret_ans1=? AND secret_ans2=?", (login_id, s_ans1, s_ans2))
-            if c.fetchone():
-                st.session_state['role'] = 'user'
-                st.session_state['user_id'] = login_id
-                st.success("تم الدخول بنجاح")
-            else:
-                st.error("بيانات الدخول غير صحيحة")
-
-    # --- لوحة تحكم الإدارة ---
-    if 'role' in st.session_state and st.session_state['role'] == 'admin':
-        st.header("🛠 لوحة تحكم المسؤول")
-        
-        # عرض البيانات والفرز
-        data = pd.read_sql("SELECT * FROM users WHERE role='user'", conn)
-        
-        st.subheader("📊 فرز وتصدير البيانات")
-        filter_col = st.multiselect("فرز حسب:", ["سليم", "مزمن", "اعاقة", "ارمل/ه", "مطلق/ه"])
-        
-        if filter_col:
-            filtered_df = data[data['health'].isin(filter_col) | data['social_status'].isin(filter_col)]
-        else:
-            filtered_df = data
-
-        st.dataframe(filtered_df)
-        
-        # تصدير إكسل
-        if st.button("تصدير النتائج إلى Excel"):
-            filtered_df.to_excel("search_results.xlsx", index=False)
-            st.success("تم حفظ الملف باسم search_results.xlsx")
-
-        # إدارة الأخبار
-        st.subheader("📢 شريط الأخبار")
-        new_post = st.text_area("أضف خبراً جديداً")
-        if st.button("نشر"):
-            c.execute("INSERT INTO news VALUES (?,?)", (new_post, datetime.now().date()))
+            c.execute("INSERT OR REPLACE INTO residents VALUES (?,?,?,?,?,?,?,?,?,?)",
+                      (id_num, fn, sn, tn, ln, phone, health, dis_info, social, 'قيد الانتظار'))
             conn.commit()
+            st.success("تم إرسال طلبك بنجاح. بانتظار موافقة الإدارة.")
 
-st.markdown(f"<hr><center>{ST_FOOTER}</center>", unsafe_allow_html=True)
+elif choice == "🔐 لوحة تحكم الإدارة":
+    admin_id = st.sidebar.text_input("رقم هوية المسؤول")
+    admin_pw = st.sidebar.text_input("كلمة المرور", type='password')
+    
+    if admin_id == "803256551" and admin_pw == "12345":
+        st.header("🛠 لوحة تحكم الدكتور أكرم")
+        
+        # الفرز
+        st.subheader("🔍 فرز البيانات")
+        filter_type = st.selectbox("فرز حسب", ["الكل", "اعاقة", "ارمل/ه", "مطلق/ه", "مزمن"])
+        
+        query = "SELECT * FROM residents"
+        if filter_type != "الكل":
+            query += f" WHERE health='{filter_type}' OR social='{filter_type}'"
+            
+        df = pd.read_sql(query, conn)
+        st.dataframe(df)
+
+        # عمليات الإدارة (حذف وتعديل)
+        target_id = st.text_input("أدخل رقم هوية العضو للإجراء (حذف أو قبول)")
+        col_btn1, col_btn2 = st.columns(2)
+        if col_btn1.button("✅ قبول الطلب"):
+            c.execute("UPDATE residents SET status='مقبول' WHERE id_num=?", (target_id,))
+            conn.commit()
+            st.rerun()
+        if col_btn2.button("🗑 حذف السجل"):
+            c.execute("DELETE FROM residents WHERE id_num=?", (target_id,))
+            conn.commit()
+            st.rerun()
+
+        # تصدير إكسل
+        buffer = io.BytesIO()
+        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False)
+        st.download_button("📥 تحميل النتائج Excel", buffer.getvalue(), "report.xlsx")
+
+st.sidebar.markdown("---")
+st.sidebar.write("حقوق الملكية: **ابوسفيان**")
