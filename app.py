@@ -5,7 +5,7 @@ from datetime import datetime
 import io
 import urllib.parse
 
-# 1. إعدادات الصفحة والتنسيق الاحترافي
+# 1. إعدادات الصفحة
 st.set_page_config(page_title="مخيم رفح السلام", layout="wide", initial_sidebar_state="collapsed")
 
 st.markdown("""
@@ -21,9 +21,10 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 2. قاعدة البيانات (SQLite)
-conn = sqlite3.connect('rafah_camp_system_2026.db', check_same_thread=False)
+# 2. قاعدة البيانات - تم تغيير اسم الملف لضمان إنشاء جداول جديدة نظيفة
+conn = sqlite3.connect('rafah_camp_2026_v2.db', check_same_thread=False)
 c = conn.cursor()
+# إنشاء الجدول بـ 9 أعمدة بدقة
 c.execute('''CREATE TABLE IF NOT EXISTS residents (
     id_num TEXT PRIMARY KEY, f1 TEXT, f2 TEXT, f3 TEXT, f4 TEXT, 
     phone TEXT, health TEXT, social TEXT, status TEXT)''')
@@ -33,7 +34,7 @@ conn.commit()
 c.execute("INSERT OR IGNORE INTO settings VALUES ('news', 'مرحباً بكم في منظومة مخيم رفح السلام الرقمية لعام 2026 - بإدارة د. أكرم السدودي.')")
 conn.commit()
 
-# إدارة حالة الجلسة
+# حالة الجلسة
 if 'logged_in' not in st.session_state: st.session_state.logged_in = False
 if 'show_login' not in st.session_state: st.session_state.show_login = False
 if 'wives_count' not in st.session_state: st.session_state.wives_count = 1
@@ -86,7 +87,6 @@ if st.session_state.logged_in:
 
     with t1:
         df = pd.read_sql("SELECT * FROM residents", conn)
-        # ترجمة الأعمدة للعربية في العرض
         df_arabic = df.rename(columns={
             'id_num': 'رقم الهوية', 'f1': 'الاسم الأول', 'f2': 'الثاني', 'f3': 'الثالث', 'f4': 'الرابع',
             'phone': 'الجوال', 'health': 'الصحة', 'social': 'الحالة الاجتماعية', 'status': 'حالة الطلب'
@@ -94,7 +94,7 @@ if st.session_state.logged_in:
         
         q = st.text_input("🔍 بحث سريع بالاسم أو الهوية")
         if q:
-            df_arabic = df_arabic[df_arabic['رقم الهوية'].str.contains(q) | df_arabic['الاسم الأول'].str.contains(q)]
+            df_arabic = df_arabic[df_arabic['رقم الهوية'].astype(str).str.contains(q) | df_arabic['الاسم الأول'].str.contains(q)]
         
         st.dataframe(df_arabic, use_container_width=True)
         
@@ -102,7 +102,7 @@ if st.session_state.logged_in:
         target_id = st.selectbox("اختر رقم الهوية لاتخاذ إجراء:", [""] + df['id_num'].tolist())
         if target_id:
             row = df[df['id_num'] == target_id].iloc[0]
-            st.info(f"الاسم: {row['f1']} {row['f4']} | الحالة الحالية: {row['status']}")
+            st.info(f"الاسم: {row['f1']} {row['f4']} | الحالة: {row['status']}")
             
             c1, c2, c3, c4, c5 = st.columns(5)
             if c1.button("✅ موافقة"):
@@ -121,7 +121,7 @@ if st.session_state.logged_in:
 
         buffer = io.BytesIO()
         df_arabic.to_excel(buffer, index=False)
-        st.download_button("📥 تحميل ملف Excel بالعربي", buffer.getvalue(), "Camp_Report_2026.xlsx")
+        st.download_button("📥 تحميل ملف Excel بالعربي", buffer.getvalue(), "Report_2026.xlsx")
 
 else:
     st.header("📝 استمارة تسجيل نازح جديد")
@@ -154,10 +154,10 @@ else:
 
         if st.form_submit_button("💾 حفظ البيانات وإرسال الطلب"):
             if f1 and id_num:
+                # هذا السطر الآن يطابق الجدول تماماً بـ 9 قيم
                 c.execute("INSERT OR REPLACE INTO residents VALUES (?,?,?,?,?,?,?,?,?)", 
                           (id_num, f1, f2, f3, f4, phone, health, social, '⏳ قيد الانتظار'))
                 conn.commit(); st.success("✅ تم حفظ البيانات بنجاح")
             else: st.error("⚠️ يرجى تعبئة الاسم الأول ورقم الهوية")
 
-# حقوق الملكية الثابتة في الأسفل
-st.markdown('<div class="footer">حقوق الملكية محفوظة باسم: ابوسفيان © 2026</div>', unsafe_allow_html=True)
+st.markdown(f'<div class="footer">حقوق الملكية محفوظة باسم: ابوسفيان © 2026</div>', unsafe_allow_html=True)
