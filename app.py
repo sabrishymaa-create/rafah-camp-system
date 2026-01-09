@@ -5,137 +5,144 @@ from datetime import datetime
 import io
 import urllib.parse
 
-# 1. إعدادات الصفحة الأساسية
-st.set_page_config(page_title="مخيم رفح السلام", layout="wide")
+# 1. إعدادات الصفحة (حل مشكلة القائمة الجانبية في الهواتف)
+st.set_page_config(page_title="مخيم رفح السلام", layout="wide", initial_sidebar_state="collapsed")
 
-# تنسيق اللغة العربية والواجهة (CSS)
+# 2. تنسيق الواجهة (CSS) لدعم العربية والجمالية
 st.markdown("""
     <style>
     @import url('fonts.googleapis.com');
     html, body, [class*="css"] { font-family: 'Cairo', sans-serif; text-align: right; direction: rtl; }
-    .stButton>button { width: 100%; border-radius: 8px; background-color: #007bff; color: white; font-weight: bold; }
-    .news-ticker { background: #b71c1c; color: white; padding: 10px; font-weight: bold; overflow: hidden; white-space: nowrap; border-radius: 5px; }
-    .ticker-text { display: inline-block; padding-right: 100%; animation: ticker 25s linear infinite; }
+    .stButton>button { width: 100%; border-radius: 10px; background-color: #2E7D32; color: white; font-weight: bold; height: 3em; }
+    .news-ticker { background: #b71c1c; color: white; padding: 12px; font-weight: bold; overflow: hidden; white-space: nowrap; border-radius: 8px; margin-bottom: 20px; border-right: 5px solid #ffeb3b; }
+    .ticker-text { display: inline-block; padding-right: 100%; animation: ticker 25s linear infinite; font-size: 1.1rem; }
     @keyframes ticker { 0% { transform: translate(0, 0); } 100% { transform: translate(100%, 0); } }
+    [data-testid="stSidebar"] { direction: rtl; }
     </style>
     """, unsafe_allow_html=True)
 
-# 2. إنشاء وقاعدة البيانات والجداول
-conn = sqlite3.connect('camp_final_v3.db', check_same_thread=False)
+# 3. قاعدة البيانات (SQLite)
+conn = sqlite3.connect('rafah_camp_system_2026.db', check_same_thread=False)
 c = conn.cursor()
-c.execute('''CREATE TABLE IF NOT EXISTS residents (id_num TEXT PRIMARY KEY, full_name TEXT, phone TEXT, health TEXT, social TEXT)''')
-c.execute('''CREATE TABLE IF NOT EXISTS family (parent_id TEXT, name TEXT, id_num TEXT, type TEXT)''')
+c.execute('''CREATE TABLE IF NOT EXISTS residents (id_num TEXT PRIMARY KEY, full_name TEXT, phone TEXT, health TEXT, social TEXT, status TEXT)''')
 c.execute('''CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)''')
 conn.commit()
 
-# إعداد شريط الأخبار الافتراضي
-c.execute("INSERT OR IGNORE INTO settings VALUES ('news', 'مرحباً بكم في مخيم رفح السلام - بإدارة د. أكرم السدودي - يرجى تسجيل البيانات بدقة')")
+# إعداد الخبر الافتراضي
+c.execute("INSERT OR IGNORE INTO settings VALUES ('news', 'مرحباً بكم في مخيم رفح السلام - بإدارة د. أكرم السدودي - يرجى تسجيل البيانات بدقة لضمان وصول الخدمات.')")
 conn.commit()
 
-# 3. تهيئة حالة الجلسة (Session State) لضمان عدم تعليق الأزرار
+# تهيئة حالة الجلسة (Session State)
 if 'wives' not in st.session_state: st.session_state.wives = []
 if 'kids' not in st.session_state: st.session_state.kids = []
 if 'auth' not in st.session_state: st.session_state.auth = False
 
 # --- شريط الأخبار المتحرك ---
 c.execute("SELECT value FROM settings WHERE key='news'")
-msg = c.fetchone()[0]
-st.markdown(f'<div class="news-ticker"><div class="ticker-text">{msg}</div></div>', unsafe_allow_html=True)
+msg_news = c.fetchone()[0]
+st.markdown(f'<div class="news-ticker"><div class="ticker-text">{msg_news}</div></div>', unsafe_allow_html=True)
 
-st.title("🏥 مخيم رفح السلام")
-st.markdown("### إدارة الدكتور أكرم السدودي")
+# --- الهيدر الرئيسي ---
+st.title("🏥 منظومة مخيم رفح السلام الرقمية")
+st.markdown(f"#### إدارة الدكتور أكرم السدودي | حقوق الملكية: ابوسفيان")
+st.write(f"📅 التاريخ: {datetime.now().strftime('%Y-%m-%d')} | 🕒 الوقت: {datetime.now().strftime('%H:%M:%S')}")
 
-menu = ["📝 تسجيل البيانات", "🔐 لوحة الإدارة"]
-choice = st.sidebar.selectbox("القائمة", menu)
+# --- قائمة التنقل الرئيسية (لتجنب مشاكل القائمة الجانبية) ---
+choice = st.selectbox("📌 اختر الإجراء المطلـوب:", ["📝 تسجيل بيانات نازح جديد", "🔐 لوحة تحكم الإدارة (Admin)"])
 
-if choice == "📝 تسجيل البيانات":
+if choice == "📝 تسجيل بيانات نازح جديد":
     st.header("📋 استمارة التسجيل")
-    
-    # نموذج البيانات الأساسية
-    f_name = st.text_input("الاسم الرباعي الكامل")
-    id_num = st.text_input("رقم الهوية")
-    phone = st.text_input("رقم الجوال")
-    health = st.selectbox("الحالة الصحية", ["سليم", "مزمن", "اعاقة حركية", "اعاقة سمعية", "اعاقة بصرية"])
-    social = st.selectbox("الحالة الاجتماعية", ["متزوج/ة", "مطلق/ه", "ارمل/ه", "منفصل", "مهجور/ه", "اعزب"])
+    with st.container():
+        col1, col2 = st.columns(2)
+        f_name = col1.text_input("الاسم الرباعي الكامل")
+        id_num = col2.text_input("رقم الهوية")
+        phone = col1.text_input("رقم الجوال")
+        
+        health_opts = ["سليم", "مزمن", "اعاقة حركية", "اعاقة سمعية", "اعاقة بصرية"]
+        health = col2.selectbox("الحالة الصحية", health_opts)
+        
+        social_opts = ["متزوج/ة", "مطلق/ه", "ارمل/ه", "منفصل", "مهجور/ه", "اعزب"]
+        social = col1.selectbox("الحالة الاجتماعية", social_opts)
 
-    st.divider()
-    
-    # إضافة الزوجات ديناميكياً
-    st.subheader("💍 بيانات الزوجات")
-    if st.button("➕ أضف زوجة جديدة"):
-        st.session_state.wives.append("")
-    
-    for i, _ in enumerate(st.session_state.wives):
-        st.session_state.wives[i] = st.text_input(f"اسم وهوية الزوجة {i+1}", key=f"w_{i}")
+        st.divider()
+        # إضافة الزوجات (+)
+        st.subheader("💍 بيانات الزوجات")
+        if st.button("➕ أضف زوجة"): st.session_state.wives.append("")
+        for i, _ in enumerate(st.session_state.wives):
+            st.session_state.wives[i] = st.text_input(f"اسم وهوية الزوجة {i+1}", key=f"w_{i}")
 
-    # إضافة الأبناء ديناميكياً
-    st.subheader("👶 بيانات الأبناء")
-    if st.button("➕ أضف ابن/ابنة"):
-        st.session_state.kids.append({"name": "", "id": ""})
-    
-    for i, _ in enumerate(st.session_state.kids):
-        col_k1, col_k2 = st.columns(2)
-        st.session_state.kids[i]['name'] = col_k1.text_input(f"اسم الابن {i+1}", key=f"kn_{i}")
-        st.session_state.kids[i]['id'] = col_k2.text_input(f"هوية الابن {i+1}", key=f"ki_{i}")
+        st.divider()
+        # إضافة الأبناء (+)
+        st.subheader("👶 بيانات الأبناء")
+        if st.button("➕ أضف ابن/ابنة"): st.session_state.kids.append({"n": "", "i": "", "d": datetime.now()})
+        for i, _ in enumerate(st.session_state.kids):
+            k1, k2, k3 = st.columns(3)
+            st.session_state.kids[i]['n'] = k1.text_input(f"اسم الابن {i+1}", key=f"kn_{i}")
+            st.session_state.kids[i]['i'] = k2.text_input(f"هوية {i+1}", key=f"ki_{i}")
+            st.session_state.kids[i]['d'] = k3.date_input(f"تاريخ ميلاد {i+1}", key=f"kd_{i}")
 
-    if st.button("💾 حفظ البيانات النهائية"):
-        if f_name and id_num:
-            c.execute("INSERT OR REPLACE INTO residents VALUES (?,?,?,?,?)", (id_num, f_name, phone, health, social))
-            for w in st.session_state.wives:
-                if w: c.execute("INSERT INTO family VALUES (?,?,?,'زوجة')", (id_num, w, ""))
-            for k in st.session_state.kids:
-                if k['name']: c.execute("INSERT INTO family VALUES (?,?,?,'ابن')", (id_num, k['name'], k['id']))
-            conn.commit()
-            st.success("✅ تم الحفظ بنجاح!")
-            # تفريغ القوائم بعد الحفظ
-            st.session_state.wives = []
-            st.session_state.kids = []
-        else:
-            st.error("⚠️ يرجى إدخال الاسم والهوية")
+        if st.button("💾 حفظ كافة البيانات"):
+            if f_name and id_num:
+                c.execute("INSERT OR REPLACE INTO residents VALUES (?,?,?,?,?,?)", (id_num, f_name, phone, health, social, "نشط"))
+                conn.commit()
+                st.success(f"✅ تم حفظ بيانات {f_name} بنجاح!")
+                st.session_state.wives, st.session_state.kids = [], [] # تفريغ القوائم
+            else:
+                st.error("⚠️ يرجى التأكد من كتابة الاسم ورقم الهوية.")
 
-elif choice == "🔐 لوحة الإدارة":
+elif choice == "🔐 لوحة تحكم الإدارة (Admin)":
     if not st.session_state.auth:
         st.subheader("🔐 دخول المسؤول")
         user = st.text_input("اسم المستخدم")
         pw = st.text_input("كلمة المرور", type="password")
-        if st.button("دخول"):
+        if st.button("تسجيل الدخول"):
             if user == "admin" and pw == "admin123":
                 st.session_state.auth = True
                 st.rerun()
-            else:
-                st.error("بيانات خاطئة")
+            else: st.error("❌ بيانات الدخول خاطئة")
     else:
         st.header("🛠 لوحة الإدارة - د. أكرم السدودي")
-        if st.button("🔓 خروج"):
+        if st.button("🔓 تسجيل الخروج"):
             st.session_state.auth = False
             st.rerun()
 
-        # تعديل الأخبار
-        with st.expander("📢 تعديل شريط الأخبار"):
-            new_msg = st.text_area("الخبر الحالي:", msg)
-            if st.button("تحديث"):
-                c.execute("UPDATE settings SET value=? WHERE key='news'", (new_msg,))
+        # تعديل شريط الأخبار
+        with st.expander("📢 تعديل الخبر المتحرك"):
+            new_news = st.text_area("الخبر الحالي:", msg_news)
+            if st.button("تحديث الخبر"):
+                c.execute("UPDATE settings SET value=? WHERE key='news'", (new_news,))
                 conn.commit()
                 st.rerun()
 
         # عرض البيانات والفرز
         df = pd.read_sql("SELECT * FROM residents", conn)
-        search = st.text_input("🔍 بحث بالاسم أو الهوية")
-        if search:
-            df = df[df['full_name'].str.contains(search) | df['id_num'].str.contains(search)]
+        
+        col_f1, col_f2 = st.columns(2)
+        search = col_f1.text_input("🔍 بحث (اسم أو هوية)")
+        f_health = col_f2.selectbox("فرز حسب الصحة:", ["الكل"] + health_opts)
+        
+        if search: df = df[df['full_name'].str.contains(search) | df['id_num'].str.contains(search)]
+        if f_health != "الكل": df = df[df['health'] == f_health]
         
         st.dataframe(df, use_container_width=True)
 
-        # التصدير والتواصل
-        if not df.empty:
+        # الإجراءات والتصدير
+        col_a, col_b, col_c = st.columns(3)
+        with col_a:
+            target = st.selectbox("اختر شخصاً للحذف:", [""] + df['id_num'].tolist())
+            if st.button("🗑 حذف السجل"):
+                c.execute("DELETE FROM residents WHERE id_num=?", (target,))
+                conn.commit()
+                st.rerun()
+        with col_b:
             towrite = io.BytesIO()
             df.to_excel(towrite, index=False)
-            st.download_button("📥 تحميل ملف Excel", towrite.getvalue(), "Camp_2026.xlsx")
-            
-            st.divider()
-            sel = st.selectbox("تواصل سريع مع:", df['full_name'].tolist())
-            phone_num = df[df['full_name']==sel]['phone'].values[0]
-            st.markdown(f"[💬 مراسلة واتساب](wa.me{phone_num})")
+            st.download_button("📥 تصدير Excel", towrite.getvalue(), "Camp_Data_2026.xlsx")
+        with col_c:
+            selected_name = st.selectbox("مراسلة واتساب:", [""] + df['full_name'].tolist())
+            if selected_name:
+                u_phone = df[df['full_name']==selected_name]['phone'].values[0]
+                st.markdown(f"[💬 اضغط لمراسلة {selected_name}](wa.me{u_phone})")
 
-st.sidebar.markdown("---")
-st.sidebar.write("© 2026 | حقوق الملكية: **ابوسفيان**")
+st.markdown("---")
+st.write("© 2026 | منظومة مخيم رفح السلام | حقوق الملكية محفوظة باسم **ابوسفيان**")
